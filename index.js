@@ -113,7 +113,6 @@ const startSimulation = () => {
   if (ABC.isRunning()) {
     return;
   }
-  
 	sets();
 	calcBuildCost(false);
   
@@ -547,7 +546,6 @@ function addListeners() {
 	document
 		.getElementById("startButton")
 		.addEventListener("click", startSimulation);
-
   // Stop button
   document.getElementById("stopButton").addEventListener("click", stopSimulation);
   
@@ -619,6 +617,12 @@ function addListeners() {
 		.getElementById("bestDowngradesButton")
 		.addEventListener("click", () => {
 			findBestDps(false);
+		});
+	
+	document
+		.getElementById("bestRingModsButton")
+		.addEventListener("click", () => {
+			ringModsResults.startUp();
 		});
 
 /*
@@ -845,7 +849,7 @@ function findBestDps(upgrade = true) {
     findBestStorage.mdiv = mdiv;
     findBestStorage.rdiv = rdiv;
 		ldiv.innerHTML = "<span>Item ±1 level</span>";
-    mdiv.innerHTML = "<span>~+%</span>"
+    	mdiv.innerHTML = "<span>~+%</span>"
 		rdiv.innerHTML = "<span>Time until profit</span>";
 
 		findBestStorage.dustForItems.forEach((item) => {
@@ -1243,3 +1247,228 @@ sheetInput.addEventListener("paste", (event) => {
 		autorunButton.click();
 	}
 });
+
+function getIndexCombinations(n,x){
+	let max = Math.pow(2,n) 
+	let indexes = []
+	let result = []
+
+	for(let i = Math.pow(2, x) - 1; i < max; i++){
+		indexes = getAllIndexes(i.toString(2).padStart(n, '0').split(""), '1')
+		if(indexes.length == x)
+			result.push(indexes)
+	}
+		
+	return result
+
+}
+
+function getRingModCombinations(){
+
+	let mods = elements.ringMods.children;
+	let n = elements.ringMods.children.length;
+	let slots = AB.getRingSlots();
+	let max = Math.pow(2,n)
+	let indexes = [];
+	let names = []
+	let modCombinations = [[],[]]
+
+	for(let i = Math.pow(2, slots) - 1; i < max; i++){
+		indexes = getAllIndexes(i.toString(2).padStart(n, '0').split(""), '1')
+		if(indexes.length == slots){
+			names = []
+			for (let j = 0; j < slots; j++)
+				names.push(mods[indexes[j]].innerHTML)
+
+			modCombinations[0].push(indexes)
+			modCombinations[1].push(names)
+		}
+	}
+
+	return modCombinations
+}
+
+function getAllIndexes(arr, val) {
+    let indexes = [];
+    for(let i = 0; i < arr.length; i++)
+        if (arr[i] === val)
+            indexes.push(i);
+    return indexes;
+}
+
+function formatNames(names){
+	for(let i = 0; i < names.length; i++)
+		names[i] = names[i][0].toUpperCase() + names[i].substring(1)
+
+	return names.join(", ")
+}
+
+let ringModsResults = {
+	modCombinationIndexes: [], 
+	modCombinationNames: [],
+	combinationIndex: 0,
+	bestDPS: 0,
+	bestKillTime: Infinity,
+	bestDPSIndex: 0,
+	bestKillTimeIndex: 0,
+	startingMods: [],
+	farm: 1,
+
+	message: function (string) {
+		document.getElementById("bestUpgradesMessage").innerHTML = string;
+	  },
+	  
+	startUp: function () {
+		if (ABC.isRunning()) {
+			return;
+		}
+		
+		
+		let mods = elements.ringMods.children;
+		let n = elements.ringMods.children.length;
+		let slots = AB.getRingSlots();
+		AB.rings.mods = [];
+		ringModsResults.startingMods = [];
+
+		for (let i = 0; i < mods.length; i++){
+			if(mods[i].classList.contains("checkedButton"))
+				ringModsResults.startingMods.push(i)
+			mods[i].className = "uncheckedButton"
+		}
+		
+		[ringModsResults.modCombinationIndexes, ringModsResults.modCombinationNames] = getRingModCombinations();
+		let currentCombo = ringModsResults.modCombinationIndexes[0]
+		
+		for (let j = 0; j < slots; j++)
+			mods[currentCombo[j]].className = "checkedButton"
+		
+		sets();
+		
+		// Clear earlier data.
+		ringModsResults.bestDPS = 0;
+		ringModsResults.bestKillTime = Infinity;
+		ringModsResults.bestDPSIndex = 0;
+		ringModsResults.bestKillTimeIndex = 0;
+		ringModsResults.combinationIndex = 0;
+
+		let div = document.getElementById("bestUpgradesDiv");
+		
+    	div.innerHTML = "";
+		let ldiv = document.createElement("div");
+		let mdiv = document.createElement("div");
+		let rdiv = document.createElement("div");
+		div.appendChild(ldiv);
+		div.appendChild(mdiv);
+		div.appendChild(rdiv);
+
+		ldiv.innerHTML = "<span>Ring Mod(s)</span>";
+    	mdiv.innerHTML = "<span>Dust/s</span>"
+		rdiv.innerHTML = "<span>Kill Time</span>";
+
+		let names = [];
+		for(let i = 0; i < ringModsResults.modCombinationIndexes.length; i++) {
+			let span1 = document.createElement("span");
+			let span2 = document.createElement("span");
+			let span3 = document.createElement("span");
+
+			names = ringModsResults.modCombinationNames[i];
+
+			span1.innerHTML = formatNames(names);
+			span2.innerHTML = "";
+			span3.innerHTML = "";
+			ldiv.appendChild(span1);
+			mdiv.appendChild(span2);
+			rdiv.appendChild(span3);
+		}
+
+		simConfig.onFightResult = null;
+		simConfig.onSimInterrupt = null;
+		simConfig.onSimComplete = ringModsResults.onComplete;
+		simConfig.onUpdate = simConfig.wrapup;
+		ABC.reconfigure(simConfig);
+		runSimulation();
+
+},
+
+	onComplete: function () {
+		if (ABC.isRunning()) {
+			return;
+		  }
+		
+		let dps = AB.getDustPs()
+		let killTime = AB.lootAvg.counter / AB.sessionEnemiesKilled
+		let div = document.getElementById("bestUpgradesDiv")
+		let span2 = div.children[1].children[1 + ringModsResults.combinationIndex];
+		let span3 = div.children[2].children[1 + ringModsResults.combinationIndex];
+		span2.innerHTML = toScientific(dps, 2, true);
+		span3.innerHTML = convertTime(killTime);
+
+		if(dps > ringModsResults.bestDPS){
+			ringModsResults.bestDPS = dps;
+			ringModsResults.bestDPSIndex = ringModsResults.combinationIndex
+		}
+
+		if(killTime < ringModsResults.bestKillTime){
+			ringModsResults.bestKillTime = killTime;
+			ringModsResults.bestKillTimeIndex = ringModsResults.combinationIndex;
+		}
+
+		ringModsResults.combinationIndex++;
+		if(ringModsResults.combinationIndex >= ringModsResults.modCombinationIndexes.length){
+			ringModsResults.finalStuff();
+			return;
+		}
+
+		let mods = elements.ringMods.children;
+		let n = elements.ringMods.children.length;
+		let slots = AB.getRingSlots();
+		AB.rings.mods = [];
+		
+		for (let i = 0; i < mods.length; i++)
+			mods[i].className = "uncheckedButton";
+	  
+		let currentCombo = ringModsResults.modCombinationIndexes[ringModsResults.combinationIndex];
+	  
+		for (let j = 0; j < slots; j++)
+			mods[currentCombo[j]].className = "checkedButton";
+	    
+		sets();
+	  
+		simConfig.onFightResult = null;
+		simConfig.onSimInterrupt = null;
+		simConfig.onSimComplete = ringModsResults.onComplete;
+		simConfig.onUpdate = ringModsResults.onUpdate;
+		ABC.reconfigure(simConfig);
+		runSimulation();
+	},
+
+	onUpdate: function () {
+		ringModsResults.message("Testing " + formatNames(AB.rings.mods) + " " + Math.floor(ABC.getProgress() * 100) + "%");
+	
+		let dps = AB.getDustPs()
+		let killTime = AB.lootAvg.counter / AB.sessionEnemiesKilled
+	
+		let div = document.getElementById("bestUpgradesDiv")
+		let span2 = div.children[1].children[1 + ringModsResults.combinationIndex];
+		let span3 = div.children[2].children[1 + ringModsResults.combinationIndex];
+		span2.innerHTML = toScientific(dps, 2, true);
+		span3.innerHTML = convertTime(killTime);
+	  },
+
+	finalStuff: function () {
+		let mods = elements.ringMods.children;
+
+		for (let i = 0; i < mods.length; i++)
+			mods[i].className = "uncheckedButton";
+
+		for (let j = 0; j < ringModsResults.startingMods.length; j++)
+			mods[ringModsResults.startingMods[j]].className = "checkedButton";
+
+		//set mod buttons back to original
+		let div = document.getElementById("bestUpgradesDiv")
+		let span2 = div.children[1].children[1 + ringModsResults.bestDPSIndex];
+		let span3 = div.children[2].children[1 + ringModsResults.bestKillTimeIndex];
+		span2.style.fontWeight = "bold";
+		span3.style.fontWeight = "bold";
+	}
+};
