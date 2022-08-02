@@ -2243,7 +2243,7 @@ export let autoBattle = {
       dustType: "shards",
     },
     //Final Poison Damage item
-    Handful_of_Mold: {
+    Myco_Mitts: {
       owned: false,
       equipped: false,
       hidden: false,
